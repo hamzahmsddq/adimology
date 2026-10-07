@@ -43,7 +43,7 @@ async function getAuthToken(): Promise<string> {
   if (!token) {
     const envToken = process.env.STOCKBIT_JWT_TOKEN;
     if (!envToken) {
-      throw new Error('STOCKBIT_JWT_TOKEN not found in database or environment');
+      throw new Error('Stockbit token not found. Open stockbit.com with the Stockbit Token Syncer extension active to sync it, or set STOCKBIT_JWT_TOKEN.');
     }
     return envToken;
   }

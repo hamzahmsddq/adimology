@@ -116,6 +116,29 @@ $$;
   }
 }
 
+const isAutomatedEnv = () => Boolean(process.env.CI || process.env.NETLIFY);
+
+/**
+ * Detect errors caused by Supabase being unreachable (DNS, network, timeout)
+ */
+function isNetworkError(error) {
+  const message = `${error?.message || ''} ${error?.details || ''}`;
+  return /fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|network/i.test(message);
+}
+
+/**
+ * In automated builds, skip migrations instead of failing when Supabase is unreachable
+ */
+function handleUnreachable(error) {
+  if (isAutomatedEnv()) {
+    console.warn('⚠️  Could not reach Supabase:', error.message);
+    console.warn('   Skipping migrations for this build. They will run on the next build that can reach Supabase.\n');
+    process.exit(0);
+  }
+  console.error('❌ Could not reach Supabase:', error.message);
+  process.exit(1);
+}
+
 /**
  * Check if migration infrastructure is set up
  */
@@ -125,6 +148,10 @@ async function checkInfrastructure() {
     .from('schema_migrations')
     .select('id')
     .limit(1);
+  
+  if (tableError && isNetworkError(tableError)) {
+    handleUnreachable(tableError);
+  }
   
   if (tableError && tableError.code === '42P01') {
     return false; // Table doesn't exist
@@ -149,6 +176,10 @@ async function getExecutedMigrations() {
     .from('schema_migrations')
     .select('migration_name, checksum')
     .order('migration_name');
+
+  if (error && isNetworkError(error)) {
+    handleUnreachable(error);
+  }
 
   if (error) {
     console.error('❌ Error fetching executed migrations:', error.message);

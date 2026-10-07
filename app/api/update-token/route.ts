@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { upsertSession } from '@/lib/supabase';
 
+// This endpoint is public (the extension has no app session), so only accept
+// well-formed, unexpired JWTs to avoid overwriting the stored token with garbage.
+function getJwtExpiry(token: string): number | null {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    return typeof payload.exp === 'number' ? payload.exp : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
@@ -20,6 +33,14 @@ export async function POST(request: NextRequest) {
     if (!token) {
       return NextResponse.json(
         { success: false, error: 'Token is required' },
+        { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } }
+      );
+    }
+
+    const jwtExp = typeof token === 'string' ? getJwtExpiry(token) : null;
+    if (!jwtExp || jwtExp * 1000 <= Date.now()) {
+      return NextResponse.json(
+        { success: false, error: 'Token must be a valid, unexpired JWT' },
         { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } }
       );
     }
